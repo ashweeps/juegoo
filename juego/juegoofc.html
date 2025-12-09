@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Escape Room — Juego</title>
+<style>
+  :root{
+    --bg:#071226;
+    --panel: rgba(255,255,255,0.04);
+    --accent:#6ea8ff;
+    --accent-2:#4be6a0;
+    --muted:#9fb0d6;
+    --glass: rgba(255,255,255,0.03);
+    --card: rgba(255,255,255,0.02);
+    --text:#eaf2ff;
+    --success:#7ef29a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;background:var(--bg);color:var(--text);}
+
+  /* App fills the browser tab (single tab) */
+  .app{
+    min-height:100vh;display:flex;flex-direction:column;align-items:stretch;
+    background-image: url('fondo.png');
+    background-size:cover;background-position:center;position:relative;overflow:hidden;
+  }
+  .overlay{position:absolute;inset:0;background:linear-gradient(180deg, rgba(3,6,12,0.45), rgba(3,6,12,0.55));pointer-events:none}
+
+  header{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:18px 26px}
+  header h1{margin:0;font-size:26px;letter-spacing:0.6px}
+  .hud-right{display:flex;gap:10px;align-items:center}
+  .badge{background:var(--card);padding:8px 12px;border-radius:999px;font-weight:800;color:var(--muted);font-size:18px}
+
+  .btn{background:var(--panel);border:0;padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer;font-weight:700}
+  .btn:hover{transform:translateY(-3px)}
+
+  /* Layout */
+  .main{position:relative;z-index:2;display:grid;grid-template-columns:1fr 380px;gap:18px;padding:18px;height:calc(100vh - 84px)}
+
+  /* Left: scene */
+  .scene-card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px;box-shadow: 0 8px 30px rgba(0,0,0,0.6);overflow:hidden}
+  .scene-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .room-title{font-weight:900;font-size:28px}
+  .room-desc{color:var(--muted);max-width:75%;line-height:1.4;font-size:18px}
+
+  .scene-image{flex:1;border-radius:10px;background:linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.55));display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+  .scene-image img{width:100%;height:100%;object-fit:cover;transform-origin:center;transition:transform .45s ease, opacity .35s}
+  .scene-overlay{position:absolute;left:12px;bottom:12px;background:linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.15));padding:10px;border-radius:10px;font-size:16px;color:var(--muted)}
+  .placeholder{color:var(--muted);font-size:20px;padding:18px;text-align:center}
+
+  .controls{display:flex;gap:10px;align-items:center;margin-top:10px}
+  .controls input[type=text]{flex:1;padding:14px;border-radius:12px;border:0;background:var(--glass);color:var(--text);outline:none;font-size:18px}
+  .controls button{padding:12px 16px;border-radius:12px;border:0;background:var(--accent);color:#042135;cursor:pointer;font-weight:800;font-size:16px}
+  .controls button.alt{background:var(--accent-2)}
+
+  /* Right column: narrative + inventory */
+  .side{display:flex;flex-direction:column;gap:12px}
+  .narrative{background:var(--card);padding:14px;border-radius:12px;min-height:320px;overflow:auto}
+  .narrative p{margin:8px 0;color:var(--muted);font-size:16px}
+
+  .inventory{background:var(--card);padding:12px;border-radius:12px;display:flex;flex-direction:column}
+  .inv-grid{display:flex;gap:8px;flex-wrap:wrap}
+  .inv-item{width:80px;height:80px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);font-size:13px;padding:6px}
+  .inv-item img{width:48px;height:48px;object-fit:contain}
+
+  /* final overlay */
+  .final-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(3,6,12,0.6);z-index:999;opacity:0;pointer-events:none;transition:opacity .3s}
+  .final-overlay.show{opacity:1;pointer-events:auto}
+  .final-card{background:linear-gradient(180deg,#071b2a,#072033);padding:26px;border-radius:16px;text-align:center;color:var(--text);min-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.7)}
+  .final-card h2{margin:0 0 8px 0;font-size:32px}
+  .final-card p{font-size:16px;color:var(--muted)}
+
+  @media (max-width:980px){.main{grid-template-columns:1fr;height:auto}.scene-image{height:360px}.inventory{order:3}}
+
+  .hint-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .hint-item{background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;color:var(--muted);font-size:16px}
+</style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="overlay"></div>
+
+    <header>
+      <h1>ESCAPE ROOM — GIRLS OF ENGENERY </h1>
+      <div class="hud-right">
+        <div class="badge" id="roomBadge">BIBLIOTECA ANTIGUA</div>
+        <button class="btn" id="rulesBtn">Reglas</button>
+        <!-- quitar botón Inventario del header (solicitado) -->
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- LEFT -->
+      <section class="scene-card" aria-live="polite">
+        <div class="scene-top">
+          <div>
+            <div class="room-title" id="roomTitle">BIBLIOTECA ANTIGUA</div>
+            <div class="room-desc" id="roomDesc">Estás en una polvorienta biblioteca. Para abrir la siguiente puerta, debes saber: ¿Cuál es el planeta más cercano al Sol?</div>
+          </div>
+          <div class="scene-overlay" id="overlayHint">Consejo: usa PISTA si estás atascado</div>
+        </div>
+
+        <div class="scene-image" id="sceneImage">
+          <div class="placeholder" id="imagePlaceholder">(Imagen faltante — coloca biblioteca.png)</div>
+        </div>
+
+        <div class="controls">
+          <input id="answerInput" type="text" placeholder="Escribe la respuesta..." autocomplete="off">
+          <button id="sendBtn">Enviar</button>
+          <button id="hintBtn" class="alt">Pista</button>
+        </div>
+
+        <div class="hint-list" id="hintList" style="display:none"></div>
+      </section>
+
+      <!-- RIGHT -->
+      <aside class="side">
+        <div class="narrative" id="narrative">
+          <p>Narrador: Tu conocimiento es la única llave. Resuelve los acertijos y avanza por las salas.</p>
+        </div>
+
+        <div class="inventory">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong style="font-size:18px">Inventario</strong>
+            <small id="invCount" style="color:var(--muted);font-size:16px">0</small>
+          </div>
+          <div class="inv-grid" id="invGrid"></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Rules modal -->
+    <div id="rulesModal" class="modal" role="dialog" aria-modal="true" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(8,10,18,0.98);padding:18px;border-radius:12px;z-index:60">
+      <h3 style="margin:0 0 8px 0">Reglas</h3>
+      <pre id="rulesText" style="white-space:pre-wrap;color:var(--muted);font-size:16px"></pre>
+      <div style="text-align:right;margin-top:12px">
+        <button class="btn" id="closeRules">Cerrar</button>
+      </div>
+    </div>
+
+    <!-- Final overlay -->
+    <div id="finalOverlay" class="final-overlay">
+      <div class="final-card">
+        <h2 id="finalTitle">¡Perfecto — escapaste!</h2>
+        <p id="finalText">Tu conocimiento abrió la última cerradura. ¡Felicidades! Si te quedaste atascado, revisa las pistas que te dimos en cada sala.</p>
+        <div style="margin-top:14px"><button class="btn" id="replayBtn">Jugar otra vez</button></div>
+      </div>
+      <canvas id="confettiCanvas" class="confetti"></canvas>
+    </div>
+
+  </div>
+
+<script>
+/* ===== Datos ===== */
+const REGLAS_INMUTABLES = [
+  "REGLAS:",
+  " - Se aceptan respuestas sin importar mayúsculas/minúsculas.",
+  " - Escribe 'INVENTARIO' para ver tus pistas.",
+  " - Escribe 'TERMINAR' para salir del juego.",
+  " - ¡Cuidado con los espacios extra! Debes ingresar solo la respuesta."
+];
+
+const MENSAJES_ERROR = [
+  " ¡CRACK! La cerradura no cede. Inténtalo de nuevo.",
+  " Respuesta incorrecta. No hay atajos aquí.",
+  " La respuesta no coincide con la llave esperada."
+];
+
+const MAPA_ESCAPE = {
+  'Biblioteca Antigua': {
+    descripcion: "Estás en una polvorienta biblioteca. Para abrir la siguiente puerta, debes saber: ¿Cuál es el planeta más cercano al Sol?",
+    respuesta_correcta: 'mercurio',
+    recompensa: 'llave_bronce',
+    siguiente_sala: 'Sala de Arte',
+    prerequisito: "",
+    pista: "Es un metal líquido a temperatura ambiente, también conocido como Hg."
+  },
+  'Sala de Arte': {
+    descripcion: "Estás frente a un caballete vacío. Una placa dice: 'Solo el autor de la Gioconda puede desbloquear la paleta'. ¿Quién pintó la famosa obra “La Mona Lisa” (solo el apellido)?",
+    respuesta_correcta: 'davinci',
+    recompensa: 'mapa_antiguo',
+    siguiente_sala: 'Laboratorio Oculto',
+    prerequisito: 'llave_bronce',
+    pista: "Es el autor de La Última Cena, un mural enorme en Milán"
+  },
+  'Laboratorio Oculto': {
+    descripcion: "La puerta está cifrada. Solo el nombre del 'viejo continente' puede cederla. Necesitas el mapa_antiguo para ver el teclado de la cerradura.",
+    respuesta_correcta: 'europa',
+    recompensa: 'formula_gravedad',
+    siguiente_sala: 'Jardin de Manzanas',
+    prerequisito: 'mapa_antiguo',
+    pista: "Aquí se encuentra la Torre Eiffel, pero esa no es la respuesta… solo es una pista del continente."
+  },
+  'Jardin de Manzanas': {
+    descripcion: "Estás en un jardín bajo un árbol. ¿Qué famoso científico descubrió la ley de la gravedad al observar una manzana caer? (Solo el apellido)",
+    respuesta_correcta: 'newton',
+    recompensa: 'codigo_final',
+    siguiente_sala: 'Observatorio Final',
+    prerequisito: 'formula_gravedad',
+    pista: "Cayó una manzana… y nació una teoría."
+  },
+  'Observatorio Final': {
+    descripcion: "Frente a ti hay un pedestal con una antorcha. Para abrir el candado de la salida, debes introducir el país donde se originaron los Juegos Olímpicos.",
+    respuesta_correcta: 'grecia',
+    recompensa: 'pase_de_escape',
+    siguiente_sala: 'Salida',
+    prerequisito: 'codigo_final',
+    pista: "El hogar de los dioses del Olimpo."
+
+  }
+};
+
+const IMAGENES_SALAS = {
+  'Biblioteca Antigua': 'biblioteca.png',
+  'Sala de Arte': 'arte.png',
+  'Laboratorio Oculto': 'laboratorio.png',
+  'Jardin de Manzanas': 'jardin.png',
+  'Observatorio Final': 'observatorio.png'
+};
+
+const ICONOS = {
+  'llave_bronce':'icon_llave.png',
+  'mapa_antiguo':'icon_mapa.png',
+  'formula_gravedad':'icon_formula.png',
+  'codigo_final':'icon_codigo.png',
+  'pase_de_escape':'icon_pase.png'
+};
+
+/* === Pistas EXACTAS que me diste === */
+const HINTS = {
+  'Biblioteca Antigua': [
+    "Es un metal líquido a temperatura ambiente, también conocido como Hg."
+  ],
+  'Sala de Arte': [
+    "Es el autor de La Última Cena, un mural enorme en Milán."
+  ],
+  'Laboratorio Oculto': [
+    "Aquí se encuentra la Torre Eiffel, pero esa no es la respuesta… solo es una pista del continente."
+  ],
+  'Jardin de Manzanas': [
+    "Cayó una manzana… y nació una teoría."
+  ],
+  'Observatorio Final': [
+    "El hogar de los dioses del Olimpo."
+  ]
+};
+
+/* Utility: map-based lowercase (como pediste) */
+function a_minusculas(texto){
+  const mapa = { 'A':'a','B':'b','C':'c','D':'d','E':'e','F':'f','G':'g','H':'h','I':'i','J':'j','K':'k','L':'l','M':'m','N':'n','O':'o','P':'p','Q':'q','R':'r','S':'s','T':'t','U':'u','V':'v','W':'w','X':'x','Y':'y','Z':'z' };
+  let res = '';
+  for (let ch of texto) res += mapa[ch] || ch;
+  return res;
+}
+function a_mayusculas(texto){
+  const mapa = { 'a':'A','b':'B','c':'C','d':'D','e':'E','f':'F','g':'G','h':'H','i':'I','j':'J','k':'K','l':'L','m':'M','n':'N','o':'O','p':'P','q':'Q','r':'R','s':'S','t':'T','u':'U','v':'V','w':'W','x':'X','y':'Y','z':'Z' };
+  let res = '';
+  for (let ch of texto) res += mapa[ch] || ch;
+  return res;
+}
+
+/* ===== State ===== */
+let inventario = [];
+let ubicacion_actual = 'Biblioteca Antigua';
+let hint_shown_for_room = {}; // controlar si ya se mostró pista principal
+
+/* DOM refs */
+const roomBadge = document.getElementById('roomBadge');
+const roomTitle = document.getElementById('roomTitle');
+const roomDesc = document.getElementById('roomDesc');
+const sceneImage = document.getElementById('sceneImage');
+const imagePlaceholder = document.getElementById('imagePlaceholder');
+const narrative = document.getElementById('narrative');
+const invGrid = document.getElementById('invGrid');
+const invCount = document.getElementById('invCount');
+const answerInput = document.getElementById('answerInput');
+const sendBtn = document.getElementById('sendBtn');
+const hintBtn = document.getElementById('hintBtn');
+const rulesBtn = document.getElementById('rulesBtn');
+const rulesModal = document.getElementById('rulesModal');
+const rulesText = document.getElementById('rulesText');
+const hintList = document.getElementById('hintList');
+const finalOverlay = document.getElementById('finalOverlay');
+const replayBtn = document.getElementById('replayBtn');
+const finalTitle = document.getElementById('finalTitle');
+const finalText = document.getElementById('finalText');
+
+/* ===== Init ===== */
+function init(){
+  rulesText.textContent = REGLAS_INMUTABLES.join('\n');
+  sendBtn.addEventListener('click', enviarRespuesta);
+  answerInput.addEventListener('keydown', e=>{ if(e.key==='Enter') enviarRespuesta(); });
+  hintBtn.addEventListener('click', mostrarPista);
+  rulesBtn.addEventListener('click', ()=> rulesModal.style.display='block');
+  document.getElementById('closeRules').addEventListener('click', ()=> rulesModal.style.display='none');
+  replayBtn.addEventListener('click', reiniciarJuego);
+  preloadResources();
+  renderSala(true);
+  appendChat('Bienvenido al Escape Room — versión web. Usa INVENTARIO o escribe TERMINAR para salir.');
+  answerInput.focus();
+}
+function preloadResources(){
+  for (let k in IMAGENES_SALAS){ const i=new Image(); i.src = IMAGENES_SALAS[k]; }
+  for (let k in ICONOS){ const i=new Image(); i.src = ICONOS[k]; }
+}
+
+/* ===== UI helpers ===== */
+function appendChat(txt){
+  const p = document.createElement('p'); p.textContent = txt; narrative.appendChild(p); narrative.scrollTop = narrative.scrollHeight;
+}
+function actualizarInventarioUI(){
+  invGrid.innerHTML = ''; invCount.textContent = inventario.length;
+  for (let it of inventario){
+    const d = document.createElement('div'); d.className = 'inv-item';
+    if (ICONOS[it]){
+      const img = document.createElement('img'); img.src = ICONOS[it]; img.alt = it; d.appendChild(img);
+      const lbl = document.createElement('div'); lbl.style.fontSize='13px'; lbl.style.marginTop='6px'; lbl.textContent = it; d.appendChild(lbl);
+    } else {
+      d.textContent = it;
+    }
+    invGrid.appendChild(d);
+  }
+}
+
+/* ===== Sala rendering ===== */
+function renderSala(initial=false){
+  const data = MAPA_ESCAPE[ubicacion_actual];
+  roomBadge.textContent = a_mayusculas(ubicacion_actual);
+  roomTitle.textContent = a_mayusculas(ubicacion_actual);
+  roomDesc.textContent = data.descripcion;
+  hintList.style.display = 'none'; hintList.innerHTML = '';
+  // reset per-room hint flag only when initial or when entering new room
+  hint_shown_for_room[ubicacion_actual] = false;
+  loadSceneImage(IMAGENES_SALAS[ubicacion_actual]);
+  if (!initial) appendChat(`Has avanzado a: ${ubicacion_actual}`);
+}
+
+function loadSceneImage(src){
+  // remove existing img/placeholder
+  sceneImage.querySelectorAll('img, .placeholder').forEach(n=>n.remove());
+  if (!src){
+    const ph = document.createElement('div'); ph.className='placeholder'; ph.textContent='(Imagen no configurada)'; sceneImage.appendChild(ph); return;
+  }
+  const img = new Image(); img.src = src;
+  img.onload = ()=>{
+    // ensure it fills container while preserving aspect
+    img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'cover';
+    img.style.opacity = 0; img.style.transform = 'scale(1.03)';
+    sceneImage.appendChild(img);
+    requestAnimationFrame(()=>{ img.style.transition='opacity .45s, transform .45s'; img.style.opacity = 1; img.style.transform = 'scale(1)'; });
+  };
+  img.onerror = ()=>{
+    const ph = document.createElement('div'); ph.className='placeholder'; ph.textContent = `(Falta archivo: ${src})`; sceneImage.appendChild(ph);
+  };
+}
+
+/* ===== Pistas (usando exactamente tus textos) ===== */
+function mostrarPista(){
+  const data = MAPA_ESCAPE[ubicacion_actual];
+  const prereq = data.prerequisito || '';
+  if (prereq && !inventario.includes(prereq)){
+    alert('Necesitas primero: ' + prereq + ' para ver más pistas.');
+    appendChat('Sistema: Pista bloqueada por prerequisito ('+prereq+').');
+    return;
+  }
+  const hints = HINTS[ubicacion_actual] || [];
+  // Si ya mostramos la pista principal exacta (tu texto), no repetir
+  if (!hint_shown_for_room[ubicacion_actual] && hints.length){
+    showHint(hints[0]);
+    hint_shown_for_room[ubicacion_actual] = true;
+    appendChat('Sistema: Mostrada pista principal.');
+    return;
+  }
+  // Si ya se mostró, dar pista secundaria o ayuda genérica
+  showHint('Pista extra: observa palabras clave en la descripción o revisa tu inventario.');
+  appendChat('Sistema: Mostrada pista extra.');
+}
+
+function showHint(text){
+  hintList.style.display = 'flex';
+  const it = document.createElement('div'); it.className='hint-item'; it.textContent = text;
+  hintList.appendChild(it);
+  setTimeout(()=> it.style.opacity = 1, 20);
+}
+
+/* ===== Validación y reglas (como tu original) ===== */
+function tiene_prerequisito(sala, inventarioLocal){
+  const prereq = MAPA_ESCAPE[sala].prerequisito || '';
+  if (!prereq) return [true, ''];
+  for (let it of inventarioLocal) if (it === prereq) return [true, ' ¡Tienes el objeto: ' + prereq + '! La pista es visible ahora.'];
+  return [false, ' Necesitas el objeto/código: ' + prereq + ' para interactuar con este desafío.'];
+}
+
+function validar_respuesta(entrada_usuario, sala_actual, inventarioLocal){
+  const data_sala = MAPA_ESCAPE[sala_actual];
+  const respuesta_esperada = data_sala.respuesta_correcta;
+  const entrada_min = a_minusculas(entrada_usuario);
+  if (entrada_min === respuesta_esperada){
+    const [tiene, mensaje] = tiene_prerequisito(sala_actual, inventarioLocal);
+    if (tiene){ appendChat('¡CLIC! Respuesta correcta.'); return true; }
+    else { appendChat(mensaje); appendChat(MENSAJES_ERROR[0]); return false; }
+  } else if (entrada_min === 'terminar'){
+    appendChat('Partida terminada por usuario.'); return 'TERMINAR';
+  } else if (entrada_min === 'inventario'){
+    mostrarInventario(); return false;
+  } else {
+    appendChat(MENSAJES_ERROR[2]); return false;
+  }
+}
+
+/* ===== Envío de respuesta ===== */
+function enviarRespuesta(){
+  const entradaRaw = answerInput.value.trim();
+  answerInput.value = '';
+  if (!entradaRaw) return;
+  const resultado = validar_respuesta(entradaRaw, ubicacion_actual, inventario);
+  if (resultado === 'TERMINAR') { alert('Gracias por jugar.'); return; }
+  if (resultado){
+    const data = MAPA_ESCAPE[ubicacion_actual];
+    const recompensa = data.recompensa;
+    if (recompensa && !inventario.includes(recompensa)){
+      inventario.push(recompensa);
+      appendChat("Sistema: ¡Recompensa obtenida! '" + recompensa + "' añadido al inventario.");
+      actualizarInventarioUI();
+    }
+    // avanzar a la siguiente sala tras pequeña pausa
+    setTimeout(()=>{
+      const siguiente = data.siguiente_sala;
+      if (siguiente === 'Salida'){
+        mostrarFinal();
+        return;
+      }
+      ubicacion_actual = siguiente;
+      renderSala();
+    }, 700);
+  } else {
+    // incorrecto -> ya manejado en validar_respuesta
+    // sugerir pista si falla varias veces podría implementarse aquí
+  }
+}
+
+/* ===== Inventario visual (derecha) ===== */
+function mostrarInventario(){
+  appendChat('Inventario: ' + (inventario.length ? inventario.join(', ') : '[vacío]'));
+  actualizarInventarioUI();
+}
+
+/* ===== Final & Confetti ===== */
+function mostrarFinal(){
+  finalOverlay.classList.add('show');
+  finalTitle.textContent = '¡Perfecto — escapaste!';
+  finalText.textContent = 'Tu ingenio te llevó a la salida. ¡Felicidades! Revisa las pistas si necesitas repasar.';
+  iniciarConfetti();
+}
+
+function iniciarConfetti(){
+  const canvas = document.getElementById('confettiCanvas');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d'); const pieces = []; const colors = ['#ff5c6c','#ffd166','#6ee7b7','#6ea8ff','#c084fc'];
+  for(let i=0;i<140;i++){ pieces.push({x:Math.random()*canvas.width,y:Math.random()*-canvas.height,vy:1+Math.random()*3,vx:-2+Math.random()*4,angle:Math.random()*360,size:6+Math.random()*8,color:colors[Math.floor(Math.random()*colors.length)]}); }
+  let raf;
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for (let p of pieces){
+      ctx.save(); ctx.fillStyle = p.color; ctx.translate(p.x,p.y); ctx.rotate(p.angle*Math.PI/180); ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size); ctx.restore();
+      p.x += p.vx; p.y += p.vy; p.angle += 6;
+      if (p.y > canvas.height + 20){ p.y = -20; p.x = Math.random()*canvas.width; }
+    }
+    raf = requestAnimationFrame(draw);
+  }
+  draw();
+  setTimeout(()=>{ cancelAnimationFrame(raf); canvas.width=0; canvas.height=0; finalOverlay.classList.remove('show'); },5000);
+}
+
+/* ===== Reiniciar ===== */
+function reiniciarJuego(){
+  inventario = []; ubicacion_actual = 'Biblioteca Antigua'; hintList.innerHTML=''; actualizarInventarioUI(); renderSala(); finalOverlay.classList.remove('show'); appendChat('Juego reiniciado. ¡Suerte!'); answerInput.focus();
+}
+
+/* ===== Inicializar ===== */
+init();
+
+/* Indicar archivos a colocar */
+console.log('Coloca en la carpeta: fondo.png, biblioteca.png, arte.png, laboratorio.png, jardin.png, observatorio.png. Opcionales: icon_llave.png, icon_mapa.png, icon_formula.png, icon_codigo.png, icon_pase.png');
+</script>
+</body>
+</html>
